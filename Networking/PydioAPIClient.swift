@@ -57,6 +57,7 @@ final class PydioAPIClient {
 
     func inspectServer(address: String, skipTLSVerification: Bool) async throws -> ServerDescriptor {
         let normalizedURL = try normalizeServerURL(address)
+        logger.info("Inspecting server at \(normalizedURL.absoluteString)")
         try await ping(baseURL: normalizedURL, skipTLSVerification: skipTLSVerification)
 
         do {
@@ -634,7 +635,13 @@ final class PydioAPIClient {
         skipTLSVerification: Bool
     ) async throws -> (Data, HTTPURLResponse) {
         let session = sessionFactory.session(skipTLSVerification: skipTLSVerification)
-        let (data, response) = try await session.data(for: request)
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            logger.error("Request failed for \(request.url?.absoluteString ?? "unknown"): \(error)")
+            throw networkError(for: request, error: error)
+        }
         guard let httpResponse = response as? HTTPURLResponse else {
             throw AppError.unexpected("The server did not return an HTTP response.")
         }
@@ -642,10 +649,48 @@ final class PydioAPIClient {
             if httpResponse.statusCode == 401 {
                 throw AppError.authentication("Authentication failed with status 401.")
             }
-            let message = String(data: data, encoding: .utf8) ?? HTTPURLResponse.localizedString(forStatusCode: httpResponse.statusCode)
+            let message = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
+                ?? HTTPURLResponse.localizedString(forStatusCode: httpResponse.statusCode)
             throw AppError.serverUnreachable(message)
         }
         return (data, httpResponse)
+    }
+
+    private func networkError(for request: URLRequest, error: Error) -> AppError {
+        if let appError = error as? AppError {
+            return appError
+        }
+
+        if let urlError = error as? URLError {
+            let host = request.url?.host ?? request.url?.absoluteString ?? "server"
+            switch urlError.code {
+            case .notConnectedToInternet:
+                return .serverUnreachable("No internet connection while reaching \(host).")
+            case .timedOut:
+                return .serverUnreachable("The request to \(host) timed out.")
+            case .cannotFindHost, .dnsLookupFailed:
+                return .serverUnreachable("Could not resolve the host \(host).")
+            case .cannotConnectToHost:
+                return .serverUnreachable("Could not connect to \(host).")
+            case .secureConnectionFailed,
+                    .serverCertificateHasBadDate,
+                    .serverCertificateUntrusted,
+                    .serverCertificateHasUnknownRoot,
+                    .serverCertificateNotYetValid,
+                    .clientCertificateRejected,
+                    .clientCertificateRequired:
+                return .serverUnreachable("TLS validation failed for \(host). Try enabling the skip TLS option if this is an internal or self-signed server.")
+            default:
+                if let message = urlError.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty {
+                    return .serverUnreachable(message)
+                }
+            }
+        }
+
+        if let message = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty {
+            return .serverUnreachable(message)
+        }
+        return .serverUnreachable("The request failed before the server returned a response.")
     }
 
     private func normalizeServerURL(_ address: String) throws -> URL {

@@ -55,7 +55,7 @@ private struct RootView: View {
             coordinator.settings.useDynamicServerColors,
             let color = coordinator.currentSession?.customPrimaryColor.flatMap(Color.init(hex:))
         else {
-            return .accentColor
+            return Color.accentColor
         }
         return color
     }

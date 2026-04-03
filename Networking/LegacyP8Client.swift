@@ -1,5 +1,4 @@
 import Foundation
-import FoundationXML
 import UniformTypeIdentifiers
 
 private struct LegacyP8SessionContext {
@@ -1385,12 +1384,6 @@ private final class LegacyNodeParserDelegate: NSObject, XMLParserDelegate {
 private extension Data {
     mutating func appendString(_ value: String) {
         append(Data(value.utf8))
-    }
-}
-
-private extension String {
-    var nonEmpty: String? {
-        isEmpty ? nil : self
     }
 }
 

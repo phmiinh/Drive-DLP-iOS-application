@@ -20,15 +20,15 @@ actor AccountRepository {
     }
 
     func activeSession() async throws -> AccountSession? {
-        try sessions().first(where: { $0.lifecycleState == .foreground })
+        try await sessions().first(where: { $0.lifecycleState == .foreground })
     }
 
     func server(for serverID: String) async throws -> ServerDescriptor? {
-        try servers().first(where: { $0.id == serverID })
+        try await servers().first(where: { $0.id == serverID })
     }
 
     func session(for accountID: String) async throws -> AccountSession? {
-        try sessions().first(where: { $0.accountID == accountID })
+        try await sessions().first(where: { $0.accountID == accountID })
     }
 
     func sessionContext(for accountID: String) async throws -> (AccountSession, ServerDescriptor, OAuthToken) {
@@ -1205,6 +1205,7 @@ final class AppServices {
     let offlineSyncService: OfflineSyncService
     let bootstrapService: AppBootstrapService
 
+    @MainActor
     init() {
         let rootURL = Self.makeRootURL()
         database = AppDatabase(rootURL: rootURL)

@@ -10,10 +10,9 @@ final class AppCoordinator: ObservableObject {
 
     private var didBootstrap = false
 
-    init(services: AppServices = AppServices()) {
-        self.services = services
+    init(services: AppServices? = nil) {
+        self.services = services ?? AppServices()
     }
-
     var currentSession: AccountSession? {
         guard case .authenticated(let session) = phase else {
             return nil

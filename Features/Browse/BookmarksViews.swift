@@ -263,7 +263,7 @@ private struct BookmarkNodeRowView: View {
     var body: some View {
         HStack(spacing: 14) {
             Image(systemName: node.isFolder ? "folder.fill" : "bookmark.circle.fill")
-                .foregroundStyle(node.isFolder ? .accentColor : .yellow)
+                .foregroundStyle(node.isFolder ? Color.accentColor : Color.yellow)
                 .frame(width: 28)
 
             VStack(alignment: .leading, spacing: 4) {

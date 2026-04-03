@@ -167,7 +167,7 @@ private struct RemoteFolderPickerView: View {
                             } label: {
                                 HStack(spacing: 12) {
                                     Image(systemName: "folder.fill")
-                                        .foregroundStyle(.accentColor)
+                                        .foregroundStyle(Color.accentColor)
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text(folder.name)
                                             .font(.body.weight(.medium))

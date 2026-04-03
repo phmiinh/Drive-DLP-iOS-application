@@ -139,7 +139,7 @@ struct ServerBadgeView: View {
         if let hex = session.customPrimaryColor, let color = Color(hex: hex) {
             return color
         }
-        return .accentColor
+        return Color.accentColor
     }
 }
 

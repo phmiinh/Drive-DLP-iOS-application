@@ -232,9 +232,12 @@ final class FolderBrowserViewModel: ObservableObject {
             : "\(node.name) is already downloaded or queued."
     }
 
-    func handleFileImport(result: Result<URL, Error>) async {
+    func handleFileImport(result: Result<[URL], Error>) async {
         do {
-            let importedURL = try result.get()
+            guard let importedURL = try result.get().first else {
+                bannerMessage = "No file was selected."
+                return
+            }
             let stagedURL = try stageImportedFile(importedURL)
             let queued = await transferQueueService.enqueue(
                 kind: .upload,
@@ -378,115 +381,7 @@ struct FolderBrowserView: View {
     }
 
     var body: some View {
-        Group {
-            switch viewModel.loadState {
-            case .idle:
-                LoadingCard(title: "Loading folder contents...")
-            case .loading where viewModel.displayedNodes.isEmpty:
-                LoadingCard(title: "Loading folder contents...")
-            case .failed(let message) where viewModel.displayedNodes.isEmpty:
-                EmptyStateCard(
-                    title: "Folder Unavailable",
-                    message: message,
-                    systemImage: "folder.badge.questionmark"
-                )
-            default:
-                List {
-                    if let bannerMessage = viewModel.bannerMessage {
-                        InlineMessageBanner(
-                            title: "Folder Status",
-                            message: bannerMessage
-                        )
-                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                        .listRowBackground(Color.clear)
-                    }
-
-                    if viewModel.displayedNodes.isEmpty {
-                        EmptyStateCard(
-                            title: viewModel.activeSearchQuery == nil ? "Empty Folder" : "No Matches",
-                            message: viewModel.activeSearchQuery == nil
-                                ? "This folder currently has no visible items."
-                                : "No remote nodes matched the current folder-scoped search.",
-                            systemImage: viewModel.activeSearchQuery == nil ? "folder" : "magnifyingglass"
-                        )
-                        .listRowBackground(Color.clear)
-                    } else {
-                        ForEach(viewModel.displayedNodes) { node in
-                            nodeDestination(node)
-                                .contextMenu {
-                                    if !node.isFolder {
-                                        Button("Queue Download") {
-                                            Task {
-                                                await viewModel.queueDownload(node)
-                                            }
-                                        }
-                                    }
-                                    Button(viewModel.isPinned(node) ? "Remove Offline" : "Pin Offline") {
-                                        Task {
-                                            await viewModel.toggleOffline(node: node)
-                                        }
-                                    }
-                                    Button("Rename") {
-                                        viewModel.nodePendingRename = node
-                                    }
-                                    Button("Move") {
-                                        viewModel.prepareRelocation(of: node, operation: .move)
-                                    }
-                                    Button("Copy") {
-                                        viewModel.prepareRelocation(of: node, operation: .copy)
-                                    }
-                                    Button(node.isBookmarked ? "Remove Bookmark" : "Bookmark") {
-                                        Task {
-                                            await viewModel.toggleBookmark(node: node)
-                                        }
-                                    }
-                                    Button(node.isShared ? "Share Public Link" : "Create Public Link") {
-                                        Task {
-                                            await viewModel.sharePublicLink(node: node)
-                                        }
-                                    }
-                                    if node.isShared {
-                                        Button("Remove Public Link", role: .destructive) {
-                                            Task {
-                                                await viewModel.removePublicLink(node: node)
-                                            }
-                                        }
-                                    }
-                                    Button("Delete", role: .destructive) {
-                                        viewModel.nodePendingDeletion = node
-                                    }
-                                }
-                                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                    Button("Delete", role: .destructive) {
-                                        viewModel.nodePendingDeletion = node
-                                    }
-                                    Button("Rename") {
-                                        viewModel.nodePendingRename = node
-                                    }
-                                    .tint(.orange)
-                                }
-                                .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                                    Button(viewModel.isPinned(node) ? "Unpin" : "Pin") {
-                                        Task {
-                                            await viewModel.toggleOffline(node: node)
-                                        }
-                                    }
-                                    .tint(.teal)
-                                    if !node.isFolder {
-                                        Button("Download") {
-                                            Task {
-                                                await viewModel.queueDownload(node)
-                                            }
-                                        }
-                                        .tint(.blue)
-                                    }
-                                }
-                        }
-                    }
-                }
-                .listStyle(.insetGrouped)
-            }
-        }
+        contentView
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $viewModel.searchText, prompt: "Search in this folder")
@@ -498,42 +393,7 @@ struct FolderBrowserView: View {
         .onChange(of: viewModel.searchText) { _ in
             viewModel.clearSearchIfNeeded()
         }
-        .toolbar {
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                Menu {
-                    ForEach(NodeSortOrder.allCases, id: \.self) { order in
-                        Button(order.label) {
-                            viewModel.selectedSortOrder = order
-                            Task {
-                                await viewModel.load()
-                            }
-                        }
-                    }
-                } label: {
-                    Label("Sort", systemImage: "arrow.up.arrow.down")
-                }
-
-                Button {
-                    viewModel.isPresentingUploadPicker = true
-                } label: {
-                    Label("Upload", systemImage: "square.and.arrow.up")
-                }
-
-                Button {
-                    viewModel.isPresentingCreateFolder = true
-                } label: {
-                    Label("Create Folder", systemImage: "folder.badge.plus")
-                }
-
-                Button {
-                    Task {
-                        await viewModel.load()
-                    }
-                } label: {
-                    Label("Refresh", systemImage: "arrow.clockwise")
-                }
-            }
-        }
+        .toolbar { browserToolbar }
         .sheet(isPresented: $viewModel.isPresentingCreateFolder) {
             FolderNameSheet(
                 title: "Create Folder",
@@ -610,25 +470,203 @@ struct FolderBrowserView: View {
         }
         .confirmationDialog(
             "Delete this item?",
-            isPresented: Binding(
-                get: { viewModel.nodePendingDeletion != nil },
-                set: { if !$0 { viewModel.nodePendingDeletion = nil } }
-            ),
+            isPresented: deleteDialogIsPresented,
             titleVisibility: .visible
         ) {
-            if let node = viewModel.nodePendingDeletion {
-                Button("Delete \(node.name)", role: .destructive) {
-                    Task {
-                        await viewModel.delete(node: node)
-                    }
-                }
-            }
-            Button("Cancel", role: .cancel) {
-                viewModel.nodePendingDeletion = nil
-            }
+            deleteConfirmationActions
         }
         .task {
             await viewModel.load()
+        }
+    }
+
+    @ViewBuilder
+    private var contentView: some View {
+        switch viewModel.loadState {
+        case .idle:
+            LoadingCard(title: "Loading folder contents...")
+        case .loading where viewModel.displayedNodes.isEmpty:
+            LoadingCard(title: "Loading folder contents...")
+        case .failed(let message) where viewModel.displayedNodes.isEmpty:
+            EmptyStateCard(
+                title: "Folder Unavailable",
+                message: message,
+                systemImage: "folder.badge.questionmark"
+            )
+        default:
+            folderList
+        }
+    }
+
+    private var folderList: some View {
+        List {
+            listContent
+        }
+        .listStyle(.insetGrouped)
+    }
+
+    @ViewBuilder
+    private var listContent: some View {
+        if let bannerMessage = viewModel.bannerMessage {
+            InlineMessageBanner(
+                title: "Folder Status",
+                message: bannerMessage
+            )
+            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+            .listRowBackground(Color.clear)
+        }
+
+        if viewModel.displayedNodes.isEmpty {
+            EmptyStateCard(
+                title: viewModel.activeSearchQuery == nil ? "Empty Folder" : "No Matches",
+                message: viewModel.activeSearchQuery == nil
+                    ? "This folder currently has no visible items."
+                    : "No remote nodes matched the current folder-scoped search.",
+                systemImage: viewModel.activeSearchQuery == nil ? "folder" : "magnifyingglass"
+            )
+            .listRowBackground(Color.clear)
+        } else {
+            ForEach(viewModel.displayedNodes) { node in
+                nodeRow(node)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func nodeRow(_ node: RemoteNode) -> some View {
+        nodeDestination(node)
+            .contextMenu {
+                nodeContextMenu(node)
+            }
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                Button("Delete", role: .destructive) {
+                    viewModel.nodePendingDeletion = node
+                }
+                Button("Rename") {
+                    viewModel.nodePendingRename = node
+                }
+                .tint(.orange)
+            }
+            .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                Button(viewModel.isPinned(node) ? "Unpin" : "Pin") {
+                    Task {
+                        await viewModel.toggleOffline(node: node)
+                    }
+                }
+                .tint(.teal)
+
+                if !node.isFolder {
+                    Button("Download") {
+                        Task {
+                            await viewModel.queueDownload(node)
+                        }
+                    }
+                    .tint(.blue)
+                }
+            }
+    }
+
+    @ViewBuilder
+    private func nodeContextMenu(_ node: RemoteNode) -> some View {
+        if !node.isFolder {
+            Button("Queue Download") {
+                Task {
+                    await viewModel.queueDownload(node)
+                }
+            }
+        }
+        Button(viewModel.isPinned(node) ? "Remove Offline" : "Pin Offline") {
+            Task {
+                await viewModel.toggleOffline(node: node)
+            }
+        }
+        Button("Rename") {
+            viewModel.nodePendingRename = node
+        }
+        Button("Move") {
+            viewModel.prepareRelocation(of: node, operation: .move)
+        }
+        Button("Copy") {
+            viewModel.prepareRelocation(of: node, operation: .copy)
+        }
+        Button(node.isBookmarked ? "Remove Bookmark" : "Bookmark") {
+            Task {
+                await viewModel.toggleBookmark(node: node)
+            }
+        }
+        Button(node.isShared ? "Share Public Link" : "Create Public Link") {
+            Task {
+                await viewModel.sharePublicLink(node: node)
+            }
+        }
+        if node.isShared {
+            Button("Remove Public Link", role: .destructive) {
+                Task {
+                    await viewModel.removePublicLink(node: node)
+                }
+            }
+        }
+        Button("Delete", role: .destructive) {
+            viewModel.nodePendingDeletion = node
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var browserToolbar: some ToolbarContent {
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            Menu {
+                ForEach(NodeSortOrder.allCases, id: \.self) { order in
+                    Button(order.label) {
+                        viewModel.selectedSortOrder = order
+                        Task {
+                            await viewModel.load()
+                        }
+                    }
+                }
+            } label: {
+                Label("Sort", systemImage: "arrow.up.arrow.down")
+            }
+
+            Button {
+                viewModel.isPresentingUploadPicker = true
+            } label: {
+                Label("Upload", systemImage: "square.and.arrow.up")
+            }
+
+            Button {
+                viewModel.isPresentingCreateFolder = true
+            } label: {
+                Label("Create Folder", systemImage: "folder.badge.plus")
+            }
+
+            Button {
+                Task {
+                    await viewModel.load()
+                }
+            } label: {
+                Label("Refresh", systemImage: "arrow.clockwise")
+            }
+        }
+    }
+
+    private var deleteDialogIsPresented: Binding<Bool> {
+        Binding(
+            get: { viewModel.nodePendingDeletion != nil },
+            set: { if !$0 { viewModel.nodePendingDeletion = nil } }
+        )
+    }
+
+    @ViewBuilder
+    private var deleteConfirmationActions: some View {
+        if let node = viewModel.nodePendingDeletion {
+            Button("Delete \(node.name)", role: .destructive) {
+                Task {
+                    await viewModel.delete(node: node)
+                }
+            }
+        }
+        Button("Cancel", role: .cancel) {
+            viewModel.nodePendingDeletion = nil
         }
     }
 
@@ -672,7 +710,7 @@ private struct NodeRowView: View {
     var body: some View {
         HStack(spacing: 14) {
             Image(systemName: node.isFolder ? "folder.fill" : "doc.fill")
-                .foregroundStyle(node.isFolder ? .accentColor : .secondary)
+                .foregroundStyle(node.isFolder ? Color.accentColor : Color.secondary)
                 .frame(width: 28)
 
             VStack(alignment: .leading, spacing: 4) {
@@ -964,4 +1002,3 @@ private extension String {
         return "/" + trimmed
     }
 }
-

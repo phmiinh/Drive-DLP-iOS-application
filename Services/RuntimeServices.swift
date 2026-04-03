@@ -11,7 +11,7 @@ actor LogRepository {
         try await store.load().sorted { $0.timestamp > $1.timestamp }
     }
 
-    func append(level: LogLevel, tag: String?, message: String, callerID: String?) {
+    func append(level: LogLevel, tag: String?, message: String, callerID: String?) async {
         let record = LogRecord(
             id: UUID(),
             timestamp: Date(),

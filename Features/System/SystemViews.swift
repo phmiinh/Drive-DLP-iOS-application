@@ -93,7 +93,7 @@ struct OfflineRootsView: View {
     var body: some View {
         Group {
             switch viewModel.loadState {
-            case .idle, .loading where viewModel.roots.isEmpty:
+            case .idle where viewModel.roots.isEmpty, .loading where viewModel.roots.isEmpty:
                 LoadingCard(title: "Loading offline roots...")
             case .failed(let message) where viewModel.roots.isEmpty:
                 EmptyStateCard(
@@ -257,7 +257,7 @@ private struct OfflineRootRowView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
                 Image(systemName: root.isFolder ? "folder.fill" : "doc.fill")
-                    .foregroundStyle(root.isFolder ? .accentColor : .secondary)
+                    .foregroundStyle(root.isFolder ? Color.accentColor : Color.secondary)
                     .frame(width: 24)
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -358,7 +358,7 @@ struct JobsView: View {
     var body: some View {
         Group {
             switch viewModel.loadState {
-            case .idle, .loading where viewModel.jobs.isEmpty:
+            case .idle where viewModel.jobs.isEmpty, .loading where viewModel.jobs.isEmpty:
                 LoadingCard(title: "Loading jobs...")
             case .failed(let message) where viewModel.jobs.isEmpty:
                 EmptyStateCard(
@@ -537,7 +537,7 @@ struct LogsView: View {
     var body: some View {
         Group {
             switch viewModel.loadState {
-            case .idle, .loading where viewModel.logs.isEmpty:
+            case .idle where viewModel.logs.isEmpty, .loading where viewModel.logs.isEmpty:
                 LoadingCard(title: "Loading logs...")
             case .failed(let message) where viewModel.logs.isEmpty:
                 EmptyStateCard(

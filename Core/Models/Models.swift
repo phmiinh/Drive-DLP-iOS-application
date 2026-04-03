@@ -491,7 +491,7 @@ enum AppPhase: Sendable {
     case accounts
 }
 
-enum LoadState<Value>: Sendable {
+enum LoadState<Value: Sendable>: Sendable {
     case idle
     case loading
     case loaded(Value)
